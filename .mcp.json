@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "geoperu": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "server.py"]
+    },
+    "fetch": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-fetch"]
+    }
+  }
+}

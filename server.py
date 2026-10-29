@@ -1,0 +1,240 @@
+"""Servidor MCP de GEOPERÚ: infraestructura de residuos sólidos del MINAM.
+
+Alternativa institucional al MCP del BCRP, autorizada por el docente (sesión 04).
+Misma arquitectura del proyecto del curso: las cuentas las hace Python, no el modelo,
+y cada respuesta trae la URL de consulta para que la cifra sea reproducible.
+
+    uv run pytest -q                                             # el contrato: 8 pruebas
+    uv run server.py                                             # el servidor, por stdio
+    claude mcp add --scope project geoperu -- uv run server.py    # conectarlo a Claude Code
+
+Fuente: Geoservidor del Ministerio del Ambiente, servicio ArcGIS REST publicado en GEOPERÚ.
+"""
+import json
+import math
+import unicodedata
+from functools import cache
+from pathlib import Path
+
+import httpx
+from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
+
+AQUI = Path(__file__).parent
+SNAPSHOT = AQUI / "datos" / "geoperu_rrss.json"
+CAPA = ("https://geoservidorperu.minam.gob.pe/arcgis/rest/services/"
+        "Servicios_GeoPERU/ServicioRRSS_MINAM/MapServer/0")
+CAMPOS = "OBJECTID,DEPARTAMEN,PROVINCIA,DISTRITO,Tipo_de_In"
+SOLO_LECTURA = {"readOnlyHint": True, "openWorldHint": True}
+
+mcp = FastMCP("geoperu", instructions=(
+    "Infraestructura de residuos sólidos del Perú, georreferenciada, del Ministerio del Ambiente "
+    "vía GEOPERÚ. Usa buscar_infraestructura para filtrar por departamento, provincia o tipo; "
+    "resumen_territorial para conteos y desgloses; infraestructuras_cercanas para radios desde una "
+    "coordenada. No cuentes a mano: cita siempre el departamento y la URL de consulta que devuelve "
+    "cada herramienta."))
+
+
+def _sin_tildes(s):
+    return unicodedata.normalize("NFD", str(s).lower()).encode("ascii", "ignore").decode()
+
+
+def _pedir(params):
+    """Una consulta al servicio ArcGIS, con errores que el modelo pueda entender."""
+    try:
+        r = httpx.get(f"{CAPA}/query", params=params, timeout=90, follow_redirects=True)
+        r.raise_for_status()
+        cuerpo = r.json()
+    except httpx.HTTPError as e:
+        raise ToolError(f"El geoservidor del MINAM no respondió: {e}. Es un servidor del Estado y "
+                        f"a veces está caído: reintenten en unos segundos.") from e
+    except ValueError as e:
+        raise ToolError("El geoservidor del MINAM devolvió HTML en vez de JSON. Reintenten.") from e
+    if "error" in cuerpo:
+        raise ToolError(f"ArcGIS rechazó la consulta: {cuerpo['error'].get('message', cuerpo['error'])}")
+    return cuerpo
+
+
+@cache
+def registros():
+    """Todos los puntos de la capa. Se bajan una vez y quedan en datos/, como el catálogo del BCRP."""
+    if SNAPSHOT.exists():
+        return json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+
+    filas, offset = [], 0
+    while True:
+        cuerpo = _pedir({"where": "1=1", "outFields": CAMPOS, "returnGeometry": "true",
+                         "outSR": "4326", "f": "json", "resultOffset": offset,
+                         "resultRecordCount": 1000})
+        lote = cuerpo.get("features", [])
+        for f in lote:
+            a, g = f.get("attributes", {}), (f.get("geometry") or {})
+            filas.append({"objectid": a.get("OBJECTID"),
+                          "departamento": (a.get("DEPARTAMEN") or "").strip().upper(),
+                          "provincia": (a.get("PROVINCIA") or "").strip().upper(),
+                          "distrito": (a.get("DISTRITO") or "").strip().upper(),
+                          "tipo": (a.get("Tipo_de_In") or "sin dato").strip(),
+                          "lon": g.get("x"), "lat": g.get("y")})
+        if not cuerpo.get("exceededTransferLimit") or not lote:
+            break
+        offset += len(lote)
+
+    if not filas:
+        raise ToolError("El geoservidor no devolvió ningún registro.")
+    SNAPSHOT.parent.mkdir(exist_ok=True)
+    SNAPSHOT.write_text(json.dumps(filas, ensure_ascii=False), encoding="utf-8")
+    return filas
+
+
+def _url(where):
+    return f"{CAPA}/query?where={where}&outFields={CAMPOS}&f=json"
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+def buscar_infraestructura(departamento: str = "", provincia: str = "", tipo: str = "",
+                           limite: int = 20) -> dict:
+    """Busca infraestructura de residuos sólidos por departamento, provincia o tipo.
+
+    Úsala para ubicar rellenos sanitarios, plantas y botaderos: dónde están, en qué distrito
+    y de qué tipo son. Los filtros no distinguen tildes ni mayúsculas y aceptan parte del nombre
+    ("piura", "LIMA", "relleno"). Vacíos = todo el país.
+
+    Devuelve cada registro con su OBJECTID, ubicación y coordenadas WGS84, más la URL de consulta.
+    """
+    filas = registros()
+    for campo, valor in (("departamento", departamento), ("provincia", provincia), ("tipo", tipo)):
+        if valor:
+            aguja = _sin_tildes(valor)
+            filas = [f for f in filas if aguja in _sin_tildes(f[campo])]
+
+    where = " AND ".join(
+        [f"UPPER({c}) LIKE '%{v.upper()}%'"
+         for c, v in (("DEPARTAMEN", departamento), ("PROVINCIA", provincia), ("Tipo_de_In", tipo)) if v]
+    ) or "1=1"
+
+    if not filas:
+        return {"filtro": where, "encontrados": 0, "registros": [],
+                "sugerencia": "Pruebe con menos palabras o revise el nombre del departamento.",
+                "fuente": _url(where)}
+
+    return {"filtro": where, "encontrados": len(filas),
+            "registros": filas[:max(1, limite)],
+            "capa": "Infraestructura de residuos sólidos · MINAM vía GEOPERÚ",
+            "fuente": _url(where)}
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+def resumen_territorial(departamento: str = "") -> dict:
+    """Conteos y desgloses de la infraestructura de residuos, calculados en Python.
+
+    Úsala en vez de contar a mano cuando pregunten cuántas infraestructuras hay, cuál es el
+    departamento con más, o cómo se reparten por tipo. departamento vacío = todo el país.
+
+    Devuelve el total, el desglose por tipo, por departamento y por provincia, y el top 5.
+    """
+    filas = registros()
+    if departamento:
+        aguja = _sin_tildes(departamento)
+        filas = [f for f in filas if aguja in _sin_tildes(f["departamento"])]
+    if not filas:
+        raise ToolError(f"No hay registros para el departamento {departamento!r}.")
+
+    def contar(campo):
+        d = {}
+        for f in filas:
+            d[f[campo]] = d.get(f[campo], 0) + 1
+        return dict(sorted(d.items(), key=lambda x: -x[1]))
+
+    por_depa = contar("departamento")
+    return {"ambito": departamento.upper() or "PERÚ", "total": len(filas),
+            "por_tipo": contar("tipo"), "por_departamento": por_depa,
+            "por_provincia": contar("provincia"),
+            "top_departamentos": list(por_depa.items())[:5],
+            "fuente": _url("1=1")}
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+def detalle_infraestructura(objectid: int) -> dict:
+    """Ficha completa de una infraestructura por su OBJECTID, con coordenadas y enlace al mapa.
+
+    Úsala después de buscar_infraestructura, cuando necesiten el detalle de un punto concreto.
+    """
+    for f in registros():
+        if f["objectid"] == objectid:
+            return {**f, "mapa": f"https://www.google.com/maps?q={f['lat']},{f['lon']}",
+                    "fuente": _url(f"OBJECTID={objectid}")}
+    raise ToolError(f"No existe OBJECTID={objectid} en la capa de GEOPERÚ. "
+                    f"Búsquenlo primero con buscar_infraestructura.")
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+def infraestructuras_cercanas(latitud: float, longitud: float, radio_km: float = 100,
+                              limite: int = 10) -> dict:
+    """Infraestructura de residuos dentro de un radio desde una coordenada del Perú.
+
+    Úsala para preguntas de proximidad: qué hay cerca de una ciudad, de una cuenca o de un
+    punto del mapa. La distancia se calcula con la fórmula de haversine en Python, en kilómetros.
+    Ejemplo: latitud=-12.05, longitud=-77.04 (Lima), radio_km=50.
+    """
+    if not (-18.5 <= latitud <= 0.5 and -81.5 <= longitud <= -68.5):
+        raise ToolError(f"La coordenada ({latitud}, {longitud}) está fuera del Perú.")
+
+    cerca = []
+    for f in registros():
+        if f["lat"] is None or f["lon"] is None:
+            continue
+        dlat = math.radians(f["lat"] - latitud)
+        dlon = math.radians(f["lon"] - longitud)
+        a = (math.sin(dlat / 2) ** 2 +
+             math.cos(math.radians(latitud)) * math.cos(math.radians(f["lat"])) * math.sin(dlon / 2) ** 2)
+        km = 6371 * 2 * math.asin(math.sqrt(a))
+        if km <= radio_km:
+            cerca.append({**f, "distancia_km": round(km, 1)})
+
+    cerca.sort(key=lambda x: x["distancia_km"])
+    return {"centro": {"lat": latitud, "lon": longitud}, "radio_km": radio_km,
+            "encontrados": len(cerca), "registros": cerca[:max(1, limite)],
+            "fuente": _url("1=1")}
+
+
+@mcp.resource("geoperu://capa/rrss")
+def ficha_capa() -> dict:
+    """Ficha de la capa: qué trae, qué campos, y qué NO se puede concluir con ella."""
+    return {
+        "capa": "Infraestructura de residuos sólidos (ServicioRRSS_MINAM)",
+        "publica": "Ministerio del Ambiente (MINAM), vía GEOPERÚ",
+        "url": CAPA, "visor": "https://visor.geoperu.gob.pe/",
+        "geometria": "puntos, WGS84 (EPSG:4326)",
+        "campos": CAMPOS.split(","),
+        "advertencias": [
+            "Los nombres vienen en mayúsculas y sin tildes.",
+            "Es una foto del registro, no una serie de tiempo: no permite medir evolución.",
+            "Ausencia de un punto no prueba ausencia de infraestructura, solo que no está registrada.",
+        ],
+    }
+
+
+@mcp.resource("geoperu://infraestructura/{objectid}")
+def ficha_punto(objectid: int) -> dict:
+    """Ficha reproducible de un OBJECTID de la capa."""
+    return detalle_infraestructura.fn(int(objectid))
+
+
+@mcp.prompt
+def informe_territorial(departamento: str = "", tema: str = "residuos sólidos") -> str:
+    """Informe territorial con cifras verificables de GEOPERÚ."""
+    donde = departamento or "el Perú"
+    return (
+        f"Escribe cinco viñetas sobre {tema} en {donde}, usando solo las herramientas de este "
+        f"servidor.\n"
+        f"1. Empieza con resumen_territorial para el total y el desglose por tipo.\n"
+        f"2. Usa buscar_infraestructura para nombrar casos concretos con su distrito.\n"
+        f"3. Si hay una ciudad relevante, usa infraestructuras_cercanas.\n"
+        f"Reglas: cada viñeta cita la URL de consulta que devolvió la herramienta. No cuentes a "
+        f"mano. Lee el recurso geoperu://capa/rrss y respeta sus advertencias: no concluyas nada "
+        f"sobre evolución en el tiempo ni interpretes la ausencia de un punto como ausencia real."
+    )
+
+
+if __name__ == "__main__":
+    mcp.run()

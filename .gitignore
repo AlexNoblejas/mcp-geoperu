@@ -1,0 +1,6 @@
+datos/
+.venv/
+__pycache__/
+*.pyc
+resultados*.csv
+_*.py

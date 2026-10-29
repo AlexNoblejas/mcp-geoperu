@@ -1,0 +1,11 @@
+id,pregunta,verdad,tolerancia
+total_nacional,"Segun la capa de infraestructura de residuos solidos del MINAM publicada en GEOPERU, cuantas infraestructuras estan registradas en todo el Peru?",76,0
+depa_piura,"Segun la capa de infraestructura de residuos solidos del MINAM en GEOPERU, cuantos registros hay en el departamento de Piura?",8,0
+depa_ayacucho,"Segun la capa de infraestructura de residuos solidos del MINAM en GEOPERU, cuantos registros hay en el departamento de Ayacucho?",7,0
+depa_lima,"Segun la capa de infraestructura de residuos solidos del MINAM en GEOPERU, cuantos registros hay en el departamento de Lima?",7,0
+depa_amazonas,"Segun la capa de infraestructura de residuos solidos del MINAM en GEOPERU, cuantos registros hay en el departamento de Amazonas?",5,0
+depa_ica,"Segun la capa de infraestructura de residuos solidos del MINAM en GEOPERU, cuantos registros hay en el departamento de Ica?",4,0
+depa_pasco,"Segun la capa de infraestructura de residuos solidos del MINAM en GEOPERU, cuantos registros hay en el departamento de Pasco?",4,0
+tipo_rsa,"Segun la capa de infraestructura de residuos solidos del MINAM en GEOPERU, cuantos registros son de tipo RSA?",57,0
+tipo_celda,"Segun la capa de infraestructura de residuos solidos del MINAM en GEOPERU, cuantos registros son de tipo CELDA TRANSITORIA?",5,0
+cerca_lima,"Segun la capa del MINAM en GEOPERU, cuantas infraestructuras de residuos solidos hay en un radio de 150 km del centro de Lima (-12.05, -77.04)?",9,0
