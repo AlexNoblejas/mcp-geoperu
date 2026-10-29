@@ -24,13 +24,31 @@ de este MCP: cada una se comprobó contra la URL del geoservidor que imprime
 
 ## Resultados
 
-<!-- Pegar aquí la tabla que imprime `python evaluar.py`, y volver a correr `python grafico.py`
-     para que el gráfico incluya el tercer panel. -->
+| modo | acierta | se equivoca | no sabe |
+|---|---:|---:|---:|
+| memoria (sin herramientas) | **0** | 0 | **10** |
+| mcp (este servidor) | **10** | 0 | 0 |
 
-| modo | acierta | se equivoca | no sabe | segundos |
-|---|---:|---:|---:|---:|
-| memoria | | | | |
-| mcp | | | | |
+**Desviación metodológica, declarada.** El `evaluar.py` del curso llama a `claude -p` 20 veces; esta
+máquina no tiene el CLI de Claude Code instalado (`where claude` no devuelve nada), así que la
+corrida automática no se pudo hacer dentro del tiempo de clase. `evaluar.py` quedó en el repositorio,
+funcional y con un parámetro `--claude` para apuntar al ejecutable. La comparación que sí se hizo está
+en `evaluar_manual.py`: misma instrucción del curso, mismas 10 preguntas, modo memoria respondido por
+Claude Opus 5 sin ninguna herramienta, con las respuestas transcritas literalmente en el archivo.
+Limitación real: n=1 por celda y un modelo distinto al del curso (Opus 5 en vez de Haiku). No
+reemplaza las 20 llamadas; se reporta como lo que es.
+
+El resultado del modo memoria es categórico y coincide con el del proyecto del BCRP (0 de 8 allá):
+**en las diez preguntas el modelo declaró no poder saberlo**, ninguna vez inventó una cifra. La
+instrucción de responder `null` antes que estimar funcionó.
+
+Con el MCP, las diez. Pero aquí hay que ser honesto sobre qué prueba eso y qué no: para preguntas de
+conteo, el valor que da el MCP y la verdad verificada salen **del mismo servicio del MINAM**. El 10 de
+10 no mide que el MCP acierte contra una fuente independiente; mide que la cadena entre el servicio y
+la respuesta no deforma el dato. La verificación independiente es otra: las verdades se comprobaron
+con el endpoint `returnCountOnly=true`, que es una ruta de consulta distinta a la que usa el servidor
+(que descarga los registros y los cuenta en Python). Que ambas rutas coincidan es lo que da
+confianza, no el puntaje.
 
 ### Dos cifras comprobadas a mano
 
@@ -87,8 +105,6 @@ Tres decisiones deliberadas, más allá de lo que pedía la rúbrica:
 
 ## Conclusión
 
-<!-- Ajustar las dos primeras frases según lo que salga en resultados.csv. -->
-
 Vale la pena construir un MCP cuando la fuente es **autoritativa, consultable y el modelo no la tiene
 memorizada**. Las tres condiciones se cumplen aquí: el servicio del MINAM es el registro oficial,
 responde por HTTP sin clave, y son datos de nicho que ningún modelo aprendió de memoria.
@@ -102,12 +118,33 @@ Donde no vale la pena es cuando la pregunta es interpretativa. Esta capa no pued
 infraestructura es suficiente, ni si mejoró, porque es una foto sin línea de tiempo. Un MCP hace que
 el modelo deje de inventar el dato; no lo convierte en analista.
 
+## Lo que falló, y por qué eso importa
+
+Dos fallas, ninguna de las cuales habría salido sin evaluar.
+
+**La evaluación encontró un bug en el servidor.** En la primera corrida, la pregunta por Ica devolvió
+6 cuando la verdad era 4. La causa: el filtro hacía coincidencia por subcadena, y `"ica"` también es
+subcadena de `HUANCAVELICA`, así que sumaba los 2 registros de Huancavelica a los 4 de Ica. El filtro
+ahora intenta primero la coincidencia exacta y solo cae a subcadena si no hay ninguna, y hay una
+prueba de regresión (`test_nombre_exacto_no_arrastra_subcadenas`) que lo fija.
+
+Es el argumento central a favor de medir. Las nueve pruebas del contrato pasaban con el bug dentro,
+porque verificaban invariantes estructurales —que los desgloses sumen el total, que un filtro
+devuelva un subconjunto— y 6 es un subconjunto perfectamente válido de 76. Lo que delató el error fue
+comparar contra una cifra verificada a mano en la fuente. Un MCP puede estar «en verde» y mentir.
+
+**El CLI no estaba donde se esperaba.** Documentado arriba. La lección operativa es que un pipeline de
+evaluación que depende de un ejecutable externo necesita resolverlo explícitamente y fallar con un
+mensaje útil, no con un `WinError 2` a mitad de veinte llamadas en paralelo.
+
 ## Para reproducirlo
 
 ```bash
 pip install fastmcp httpx pytest pandas matplotlib
-pytest -q                         # 9 pruebas
+pytest -q                         # 10 pruebas
 python cifras_para_verificar.py   # cifras + URL del MINAM de cada una
-python evaluar.py                 # memoria contra mcp
+python evaluar_manual.py          # memoria contra mcp (sin depender del CLI)
+# o, si tienen el CLI de Claude Code:
+# python evaluar.py --claude "C:\\ruta\\a\\claude.cmd"
 python grafico.py                 # grafico.png
 ```

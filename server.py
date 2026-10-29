@@ -35,6 +35,11 @@ mcp = FastMCP("geoperu", instructions=(
     "cada herramienta."))
 
 
+def _fn(herramienta):
+    """La función de Python detrás de una herramienta, en cualquier versión de FastMCP."""
+    return getattr(herramienta, "fn", herramienta)
+
+
 def _sin_tildes(s):
     return unicodedata.normalize("NFD", str(s).lower()).encode("ascii", "ignore").decode()
 
@@ -103,9 +108,12 @@ def buscar_infraestructura(departamento: str = "", provincia: str = "", tipo: st
     """
     filas = registros()
     for campo, valor in (("departamento", departamento), ("provincia", provincia), ("tipo", tipo)):
-        if valor:
-            aguja = _sin_tildes(valor)
-            filas = [f for f in filas if aguja in _sin_tildes(f[campo])]
+        if not valor:
+            continue
+        aguja = _sin_tildes(valor)
+        # Primero coincidencia exacta: "ica" debe dar ICA y no también HUANCAVELICA.
+        exactas = [f for f in filas if _sin_tildes(f[campo]) == aguja]
+        filas = exactas or [f for f in filas if aguja in _sin_tildes(f[campo])]
 
     where = " AND ".join(
         [f"UPPER({c}) LIKE '%{v.upper()}%'"
@@ -135,7 +143,8 @@ def resumen_territorial(departamento: str = "") -> dict:
     filas = registros()
     if departamento:
         aguja = _sin_tildes(departamento)
-        filas = [f for f in filas if aguja in _sin_tildes(f["departamento"])]
+        exactas = [f for f in filas if _sin_tildes(f["departamento"]) == aguja]
+        filas = exactas or [f for f in filas if aguja in _sin_tildes(f["departamento"])]
     if not filas:
         raise ToolError(f"No hay registros para el departamento {departamento!r}.")
 
@@ -217,7 +226,7 @@ def ficha_capa() -> dict:
 @mcp.resource("geoperu://infraestructura/{objectid}")
 def ficha_punto(objectid: int) -> dict:
     """Ficha reproducible de un OBJECTID de la capa."""
-    return detalle_infraestructura.fn(int(objectid))
+    return _fn(detalle_infraestructura)(int(objectid))
 
 
 @mcp.prompt

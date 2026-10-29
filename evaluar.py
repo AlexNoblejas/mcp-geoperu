@@ -8,7 +8,9 @@ GEOPERÚ y no el del BCRP (alternativa institucional autorizada por el docente).
 """
 import argparse
 import json
+import shutil
 import subprocess
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -29,8 +31,26 @@ MODOS = {   # todas sin las herramientas de archivos y terminal de Claude Code
 }
 
 
-def preguntar(pregunta, modo, modelo):
-    cmd = ["claude", "-p", INSTRUCCION + pregunta, "--output-format", "json", "--json-schema", json.dumps(ESQUEMA),
+# En Windows «claude» es un .cmd: hay que resolver la ruta completa o CreateProcess no lo encuentra.
+def hallar_claude(ruta=None):
+    """En Windows «claude» es un .cmd y a veces no está en el PATH de Anaconda Prompt."""
+    if ruta:
+        return ruta if Path(ruta).exists() else None
+    v = shutil.which("claude") or shutil.which("claude.cmd")
+    if v:
+        return v
+    for p in [Path.home() / "AppData/Roaming/npm/claude.cmd",
+              Path.home() / "AppData/Local/npm/claude.cmd",
+              Path.home() / ".local/bin/claude.exe",
+              Path.home() / "AppData/Local/Programs/claude/claude.exe",
+              Path("C:/Program Files/nodejs/claude.cmd")]:
+        if p.exists():
+            return str(p)
+    return None
+
+
+def preguntar(pregunta, modo, modelo, CLAUDE=None):
+    cmd = [CLAUDE, "-p", INSTRUCCION + pregunta, "--output-format", "json", "--json-schema", json.dumps(ESQUEMA),
            "--no-session-persistence", "--model", modelo, *MODOS[modo]]
     t = time.time()
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600, cwd=AQUI)
@@ -55,7 +75,13 @@ if __name__ == "__main__":
     p.add_argument("--modelo", default="haiku")
     p.add_argument("--preguntas", default=str(AQUI / "preguntas.csv"))
     p.add_argument("--paralelo", type=int, default=4)
+    p.add_argument("--claude", default=None, help="ruta completa a claude.cmd si no esta en el PATH")
     a = p.parse_args()
+    CLAUDE = hallar_claude(a.claude)
+    if CLAUDE is None:
+        sys.exit("No encuentro «claude». Corran `where claude` en una terminal donde funcione y pasen\n"
+                 "la ruta: python evaluar.py --claude \"C:\\ruta\\a\\claude.cmd\"")
+    print(f"claude: {CLAUDE}")
     if "mcp" in a.modos and not (AQUI / ".mcp.json").exists():
         raise SystemExit("Falta .mcp.json. Conecten su servidor: claude mcp add --scope project geoperu -- uv run server.py")
 
@@ -66,7 +92,7 @@ if __name__ == "__main__":
     casos = [(q, m) for q in preguntas.itertuples() for m in a.modos]
     print(f"{len(casos)} llamadas a claude -p con {a.modelo}...")
     with ThreadPoolExecutor(a.paralelo) as ex:
-        respuestas = list(ex.map(lambda c: preguntar(c[0].pregunta, c[1], a.modelo), casos))
+        respuestas = list(ex.map(lambda c: preguntar(c[0].pregunta, c[1], a.modelo, CLAUDE), casos))
 
     filas = [{"id": q.id, "modo": m, "verdad": q.verdad, **r, "resultado": calificar(r["valor"], q.verdad, q.tolerancia)}
              for (q, m), r in zip(casos, respuestas)]

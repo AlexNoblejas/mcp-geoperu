@@ -89,3 +89,12 @@ def test_cercanas_desde_lima_y_fuera_del_peru():
     assert r["registros"] == sorted(r["registros"], key=lambda x: x["distancia_km"])
     with pytest.raises(ToolError, match="fuera del Perú"):
         llamar("infraestructuras_cercanas", latitud=40.7, longitud=-74.0)
+
+
+# extra · regresion: "ica" no debe arrastrar HUANCAVELICA (bug que detecto la evaluacion)
+def test_nombre_exacto_no_arrastra_subcadenas():
+    ica = llamar("buscar_infraestructura", departamento="ica", limite=100)
+    assert all(x["departamento"] == "ICA" for x in ica["registros"])
+    huanca = llamar("buscar_infraestructura", departamento="huancavelica", limite=100)
+    assert all(x["departamento"] == "HUANCAVELICA" for x in huanca["registros"])
+    assert ica["encontrados"] + huanca["encontrados"] <= llamar("resumen_territorial")["total"]
