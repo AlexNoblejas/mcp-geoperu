@@ -22,14 +22,34 @@ cambia qué preguntas puede responder un MCP y qué puede hacer mal:
 La fuente es el servicio `ServicioRRSS_MINAM` del geoservidor del MINAM, consultado por la API REST
 de ArcGIS. No necesita clave.
 
+## Alcance: el catálogo completo, no una capa
+
+El servidor del MINAM publica **4,659 capas georreferenciadas** en 209 servicios y 15 carpetas
+temáticas (riesgo de desastres, zonificación ecológica económica, biodiversidad, agua, suelos,
+deforestación, áreas naturales protegidas, residuos). El catálogo se descubre solo recorriendo
+`?f=json`, igual que el del BCRP se baja de una URL.
+
+| El proyecto del BCRP | Este |
+|---|---|
+| `catalogo()` · 17,167 series, cacheado en `datos/` | `catalogo()` · 4,659 capas, cacheado en `datos/` |
+| `buscar_series("ipc 12 meses")` | `buscar_capas("riesgo distrital")` |
+| `serie(codigo, desde, hasta)` | `consultar_capa(servicio, capa, where)` |
+
+`descubrir.py` imprime el catálogo entero si quieren verlo sin pasar por el MCP.
+
+**Límite declarado:** es *un* servidor, el del MINAM. GeoPerú como visor agrega capas de otras
+entidades alojadas en sus propios servidores (SERNANP, MIDAGRI, IGN). Lo que generaliza es el
+protocolo: `consultar_capa` sirve con cualquier ArcGIS REST del Estado cambiando la constante `RAIZ`.
+
 ## Arquitectura
 
 | Archivo | Qué es |
 |---|---|
-| `server.py` | El servidor: 4 herramientas, 2 recursos, 1 prompt |
+| `server.py` | El servidor: 6 herramientas, 2 recursos, 1 prompt |
 | `test_server.py` | El contrato: 8 pruebas equivalentes a las 8 del BCRP, con datos reales |
 | `.mcp.json` | `geoperu` y `fetch`, sin claves |
 | `preguntas.csv` | Las 10 preguntas de la evaluación |
+| `descubrir.py` | Recorre el catálogo del servidor y lista todas las capas |
 | `cifras_para_verificar.py` | Calcula cada cifra y da la URL del MINAM para comprobarla a mano |
 | `evaluar.py` | Igual que el del curso; solo cambia `mcp__bcrp` por `mcp__geoperu` |
 | `datos/` | La capa descargada. No se versiona: se vuelve a bajar sola |
@@ -38,6 +58,8 @@ de ArcGIS. No necesita clave.
 
 | Herramienta | Qué hace | Por qué existe |
 |---|---|---|
+| `buscar_capas` | busca entre las 4,659 capas del servidor | el equivalente de `buscar_series`: descubrir antes de consultar |
+| `consultar_capa` | consulta cualquier capa con un `where` de ArcGIS | el equivalente de `serie`: una función para todas las capas |
 | `buscar_infraestructura` | filtra por departamento, provincia o tipo | el equivalente de `buscar_series` |
 | `resumen_territorial` | totales y desgloses por tipo, departamento y provincia | el equivalente de `resumen`: Python cuenta, no el modelo |
 | `detalle_infraestructura` | ficha de un OBJECTID con coordenadas | el equivalente de `serie` |

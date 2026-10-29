@@ -89,6 +89,27 @@ las pruebas 3 a 5 verifican **invariantes** (que los desgloses sumen el total, q
 un subconjunto) en vez de números clavados: una prueba atada a «24 departamentos» se rompería el día
 que el MINAM corrija la tipografía, y lo haría pareciendo un error del código.
 
+## Del dato a la fuente: 4,659 capas
+
+La primera versión de este servidor consultaba una sola capa, y eso lo volvía un MCP de la capa de
+residuos del MINAM, no de GeoPerú. Recorriendo el catálogo del servidor con `?f=json` aparecen
+**4,659 capas en 209 servicios y 15 carpetas**: riesgo de desastres (137 capas), zonificación
+ecológica económica, caracterización del territorio, agua, suelos, biodiversidad, deforestación y
+áreas naturales protegidas.
+
+Por eso el servidor terminó con dos niveles: cuatro herramientas dedicadas a residuos sólidos, que
+es el caso trabajado a fondo, y dos genéricas —`buscar_capas` y `consultar_capa`— que replican la
+lógica del proyecto del BCRP sobre el catálogo geoespacial. El modelo descubre qué hay y consulta lo
+que necesita, sin una función por tema.
+
+Un detalle de implementación que valió 1,177 capas: 62 servicios fallaban al leerse porque sus
+nombres llevan tildes (`02_CARACTERIZACIÓN_DEL_TERRITORIO_TUMBES`) y la URL no venía escapada. Con
+`urllib.parse.quote` el catálogo pasó de 3,482 a 4,659 capas. Es el tipo de error que no rompe nada
+visiblemente: simplemente hace que una cuarta parte del catálogo no exista para quien consulta.
+
+**Lo que sigue siendo un límite:** es un solo servidor, el del MINAM. GeoPerú agrega capas de otras
+entidades alojadas en sus propios ArcGIS. Lo generalizable es el protocolo, no la URL.
+
 ## Qué hace el servidor para no mentir
 
 Tres decisiones deliberadas, más allá de lo que pedía la rúbrica:

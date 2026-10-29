@@ -12,6 +12,7 @@ Fuente: Geoservidor del Ministerio del Ambiente, servicio ArcGIS REST publicado 
 """
 import json
 import math
+from urllib.parse import quote
 import unicodedata
 from functools import cache
 from pathlib import Path
@@ -25,14 +26,20 @@ SNAPSHOT = AQUI / "datos" / "geoperu_rrss.json"
 CAPA = ("https://geoservidorperu.minam.gob.pe/arcgis/rest/services/"
         "Servicios_GeoPERU/ServicioRRSS_MINAM/MapServer/0")
 CAMPOS = "OBJECTID,DEPARTAMEN,PROVINCIA,DISTRITO,Tipo_de_In"
+
+# El catálogo completo del servidor. Es el equivalente de las 17,167 series del BCRP:
+# 3,482 capas publicadas, que se descubren solas en vez de escribirse a mano.
+RAIZ = "https://geoservidorperu.minam.gob.pe/arcgis/rest/services"
+CATALOGO = AQUI / "datos" / "catalogo_arcgis.json"
 SOLO_LECTURA = {"readOnlyHint": True, "openWorldHint": True}
 
 mcp = FastMCP("geoperu", instructions=(
-    "Infraestructura de residuos sólidos del Perú, georreferenciada, del Ministerio del Ambiente "
-    "vía GEOPERÚ. Usa buscar_infraestructura para filtrar por departamento, provincia o tipo; "
-    "resumen_territorial para conteos y desgloses; infraestructuras_cercanas para radios desde una "
-    "coordenada. No cuentes a mano: cita siempre el departamento y la URL de consulta que devuelve "
-    "cada herramienta."))
+    "Datos georreferenciados del geoservidor del Ministerio del Ambiente, publicados en GEOPERÚ. "
+    "Dos niveles. (1) Para residuos sólidos hay herramientas dedicadas: buscar_infraestructura, "
+    "resumen_territorial, detalle_infraestructura e infraestructuras_cercanas. (2) Para cualquier "
+    "otro tema territorial —riesgo de desastres, ZEE, biodiversidad, agua, suelos, deforestación, "
+    "áreas protegidas— busca primero la capa con buscar_capas y luego consúltala con consultar_capa. "
+    "No cuentes a mano y cita siempre la URL de consulta que devuelve cada herramienta."))
 
 
 def _fn(herramienta):
@@ -45,9 +52,14 @@ def _sin_tildes(s):
 
 
 def _pedir(params):
-    """Una consulta al servicio ArcGIS, con errores que el modelo pueda entender."""
+    """Una consulta a la capa de residuos sólidos."""
+    return _pedir_en(f"{CAPA}/query", params)
+
+
+def _pedir_en(url, params):
+    """Una consulta a cualquier endpoint ArcGIS, con errores que el modelo pueda entender."""
     try:
-        r = httpx.get(f"{CAPA}/query", params=params, timeout=90, follow_redirects=True)
+        r = httpx.get(url, params=params, timeout=90, follow_redirects=True)
         r.raise_for_status()
         cuerpo = r.json()
     except httpx.HTTPError as e:
@@ -204,6 +216,92 @@ def infraestructuras_cercanas(latitud: float, longitud: float, radio_km: float =
     return {"centro": {"lat": latitud, "lon": longitud}, "radio_km": radio_km,
             "encontrados": len(cerca), "registros": cerca[:max(1, limite)],
             "fuente": _url("1=1")}
+
+
+@cache
+def catalogo():
+    """Las capas publicadas por el servidor: carpeta, servicio, id y nombre. Se baja una vez."""
+    if CATALOGO.exists():
+        return json.loads(CATALOGO.read_text(encoding="utf-8"))
+
+    def leer(url):
+        r = httpx.get(url, params={"f": "json"}, timeout=90, follow_redirects=True)
+        r.raise_for_status()
+        return r.json()
+
+    def recorrer(carpeta=""):
+        try:
+            d = leer(f"{RAIZ}/{quote(carpeta)}" if carpeta else RAIZ)
+        except (httpx.HTTPError, ValueError):
+            return
+        for s in d.get("services", []):
+            if s.get("type") in ("MapServer", "FeatureServer"):
+                yield s["name"], s["type"]
+        for sub in d.get("folders", []):
+            yield from recorrer(sub)
+
+    capas = []
+    for nombre, tipo in recorrer():
+        try:
+            d = leer(f"{RAIZ}/{quote(nombre)}/{tipo}")
+        except (httpx.HTTPError, ValueError):
+            continue
+        for c in d.get("layers", []):
+            capas.append({"servicio": nombre, "tipo": tipo, "capa": c["id"],
+                          "nombre": c["name"],
+                          "texto": _sin_tildes(f"{nombre} {c['name']}")})
+    if not capas:
+        raise ToolError("No se pudo leer el catálogo del geoservidor.")
+    CATALOGO.parent.mkdir(exist_ok=True)
+    CATALOGO.write_text(json.dumps(capas, ensure_ascii=False), encoding="utf-8")
+    return capas
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+def buscar_capas(texto: str, limite: int = 15) -> dict:
+    """Busca entre las capas georreferenciadas publicadas por el geoservidor del MINAM.
+
+    Es el primer paso para cualquier pregunta territorial que NO sea de residuos sólidos: el
+    servidor publica más de tres mil capas (riesgo de desastres, zonificación ecológica
+    económica, biodiversidad, agua, suelos, deforestación, áreas naturales protegidas), y esta
+    herramienta encuentra la que corresponde. Todas las palabras deben aparecer en el nombre del
+    servicio o de la capa; no distingue tildes ni mayúsculas.
+
+    Ejemplos: "riesgo distrital", "areas naturales protegidas", "deforestacion", "zee la libertad".
+    Devuelve servicio, tipo, id de capa y nombre: eso es lo que pide consultar_capa.
+    """
+    capas = catalogo()
+    for palabra in _sin_tildes(texto).split():
+        capas = [c for c in capas if palabra in c["texto"]]
+    if not capas:
+        return {"consulta": texto, "encontradas": 0, "capas": [],
+                "sugerencia": "Pruebe con menos palabras.", "total_en_catalogo": len(catalogo())}
+    return {"consulta": texto, "encontradas": len(capas),
+            "capas": [{k: c[k] for k in ("servicio", "tipo", "capa", "nombre")}
+                      for c in capas[:max(1, limite)]],
+            "total_en_catalogo": len(catalogo())}
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+def consultar_capa(servicio: str, capa: int, where: str = "1=1", tipo: str = "MapServer",
+                   campos: str = "*", limite: int = 20) -> dict:
+    """Consulta cualquier capa del geoservidor, con los datos que devuelva buscar_capas.
+
+    Úsala después de buscar_capas. `where` es SQL de ArcGIS: "1=1" trae todo,
+    "DEPARTAMENTO='PIURA'" filtra. Para saber qué campos tiene una capa antes de filtrar,
+    consúltenla con where="1=1" y limite=1 y miren las claves del primer registro.
+
+    Devuelve el conteo, los registros y la URL exacta de la consulta.
+    """
+    cuerpo = _pedir_en(f"{RAIZ}/{quote(servicio)}/{tipo}/{capa}/query",
+                       {"where": where, "outFields": campos, "returnGeometry": "false",
+                        "f": "json", "resultRecordCount": max(1, min(limite, 200))})
+    rasgos = cuerpo.get("features", [])
+    return {"servicio": servicio, "capa": capa, "where": where,
+            "devueltos": len(rasgos),
+            "registros": [f.get("attributes", {}) for f in rasgos],
+            "fuente": f"{RAIZ}/{quote(servicio)}/{tipo}/{capa}/query?where={quote(where)}"
+                      f"&outFields={campos}&f=json"}
 
 
 @mcp.resource("geoperu://capa/rrss")
