@@ -8,7 +8,7 @@ empezando por el geoservidor del MINAM que publica las capas de GEOPERÚ.
 
 | | |
 |---|---|
-| Pruebas | 13 en verde, con datos reales. La tabla de equivalencia con las 8 del proyecto original está en el README |
+| Pruebas | 15 en verde, con datos reales. La tabla de equivalencia con las 8 del proyecto original está en el README |
 | Herramientas | 7 · dos genéricas (`buscar_capas`, `consultar_capa`) + `listar_servidores` + cuatro dedicadas a residuos sólidos |
 | Herramienta propia | `infraestructuras_cercanas`: radio en km desde una coordenada, con haversine en Python |
 | Evaluación | memoria **0/10** · MCP **10/10** |
@@ -38,6 +38,15 @@ empezando por el geoservidor del MINAM que publica las capas de GEOPERÚ.
    nombres llevan tildes (`02_CARACTERIZACIÓN_DEL_TERRITORIO_TUMBES`). Con
    `urllib.parse.quote` el catálogo pasó de 3,482 a 4,659 capas. No daba ningún error:
    simplemente una cuarta parte del catálogo no existía para quien consultaba.
+
+**Auditoría propia.** Ejercitando el servidor con entradas límite salieron seis defectos
+más, todos corregidos y fijados con pruebas: `limite=0` devolvía 1 registro en silencio;
+un servidor mal escrito devolvía 0 capas en vez de error; la búsqueda vacía volcaba las
+4,708 capas al contexto; el recurso con entrada no numérica lanzaba un `ValueError` de
+Python en vez de un `ToolError` util; `SampleWorldCities` —el servicio de demostración que
+ArcGIS instala por defecto y quedó publicado en CENEPRED— se contaba como dato oficial
+(46 capas útiles, no 49); y el catálogo no declaraba su fecha de descarga. Los seis
+devolvían respuestas plausibles sin lanzar ningún error.
 
 **Qué es y qué no es GEOPERÚ.** Es un visor que agrega capas publicadas por varias
 entidades, cada una en su propio ArcGIS; no hay una API única. Por eso el servidor tiene un

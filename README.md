@@ -116,8 +116,7 @@ uv run evaluar.py                 # 4. memoria contra MCP
 python probar_mcp.py
 ```
 
-Arranca el servidor por stdio y ejercita el protocolo completo —negocia la conexión, lista las 7
-herramientas, el recurso, la plantilla y el prompt, y los llama— igual que haría Claude Code, pero
+Arranca el servidor por stdio y ejercita el protocolo completo —negocia la conexión, lista las 7 herramientas, el recurso, la plantilla y el prompt, y los llama— igual que haría Claude Code, pero
 sin necesitar el CLI instalado. Es la forma de comprobar que el servidor cumple MCP en una máquina
 donde `claude` no está en el PATH.
 

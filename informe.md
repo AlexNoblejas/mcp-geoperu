@@ -145,6 +145,31 @@ Tres decisiones deliberadas, más allá de lo que pedía la rúbrica:
    de registro. El prompt `informe_territorial` le exige al modelo respetar esas advertencias. Un MCP
    que solo entrega datos invita a sobreinterpretarlos; este entrega los datos y sus límites.
 
+## Auditoría del servidor: seis defectos propios
+
+Probar los casos felices no dice nada. Se ejercitó el servidor con entradas límite —vacías,
+negativas, de tipo equivocado, nombres inexistentes— y salieron seis defectos, todos corregidos:
+
+| N.º | Qué hacía mal | Por qué importaba |
+|---:|---|---|
+| 1 | `limite=0` y `limite=-5` devolvían 1 registro | `max(1, limite)` corregía en silencio: el modelo pide cero y recibe uno sin saberlo |
+| 2 | `buscar_capas(servidor="ATLANTIS")` devolvía 0 capas | un servidor mal escrito se leía como «no hay datos» en vez de «ese servidor no existe», y era inconsistente con `consultar_capa`, que sí avisaba |
+| 3 | `buscar_capas(texto="")` devolvía las 4,708 capas | volcaba el catálogo entero al contexto del modelo |
+| 4 | el recurso con `/abc` lanzaba `ValueError: invalid literal for int()` | el modelo recibía una excepción de Python en vez de una instrucción para corregirse |
+| 5 | `SampleWorldCities` contaba como dato oficial | 3 de las 49 capas de CENEPRED son el servicio de demostración que ArcGIS instala por defecto: las útiles son 46 |
+| 6 | el catálogo no declaraba su fecha | es una copia local sin expiración; servía datos viejos sin decir de cuándo eran |
+
+Los seis comparten la forma de los hallazgos anteriores: **ninguno lanzaba un error**. Todos
+devolvían una respuesta plausible. El defecto 5 es el más instructivo porque no es un bug de código
+sino de lectura: `SampleWorldCities` son ciudades del mundo que vienen con la instalación de ArcGIS,
+y quedaron publicadas en el servidor de CENEPRED. Contarlas como catálogo nacional infla la cifra
+en un 6 % para esa entidad.
+
+Ahora `limite` se valida, un servidor inexistente lanza `ToolError` nombrando los disponibles, la
+búsqueda vacía exige un término o un servidor, el recurso explica que el OBJECTID va de 465 a 545,
+las capas de demostración se cuentan aparte y `listar_servidores` declara cuándo se descargó el
+catálogo. Hay cinco pruebas nuevas que fijan ese comportamiento: **15 en total**.
+
 ## Conclusión
 
 Vale la pena construir un MCP cuando la fuente es **autoritativa, consultable y el modelo no la tiene

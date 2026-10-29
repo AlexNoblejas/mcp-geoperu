@@ -105,7 +105,8 @@ def test_registro_de_servidores():
     r = llamar("listar_servidores")
     assert r["activos"], "ningun servidor del registro respondio"
     assert {"servidor", "entidad", "capas"} <= r["activos"][0].keys()
-    assert r["total_capas"] == sum(s["capas"] for s in r["activos"])
+    assert r["total_capas_oficiales"] == sum(s["capas"] for s in r["activos"])
+    assert r["catalogo_descargado"], "el catalogo debe declarar de cuando es"
     assert "minam" in [s["servidor"] for s in r["activos"]]
 
 
@@ -124,3 +125,17 @@ def test_buscar_capas_y_consultar_capa():
 def test_servidor_inexistente_da_un_error_claro():
     with pytest.raises(ToolError, match="atlantis"):
         llamar("consultar_capa", servicio="x", capa=0, servidor="atlantis")
+    # buscar_capas debe fallar igual, no devolver cero en silencio
+    with pytest.raises(ToolError, match="atlantis"):
+        llamar("buscar_capas", texto="riesgo", servidor="atlantis")
+
+
+def test_limite_invalido_no_se_corrige_en_silencio():
+    for mal in (0, -5):
+        with pytest.raises(ToolError, match="limite"):
+            llamar("buscar_infraestructura", departamento="lima", limite=mal)
+
+
+def test_busqueda_vacia_no_vuelca_el_catalogo():
+    with pytest.raises(ToolError, match="buscar"):
+        llamar("buscar_capas", texto="")

@@ -32,6 +32,10 @@ CAMPOS = "OBJECTID,DEPARTAMEN,PROVINCIA,DISTRITO,Tipo_de_In"
 # El catálogo de capas de TODOS los servidores vivos del registro. Es el equivalente de las
 # 17,167 series del BCRP: se descubre solo en vez de escribirse a mano.
 RAIZ = SERVIDORES["minam"]["raiz"]          # el servidor de la capa de residuos
+
+# Servicios de demostración que ArcGIS instala por defecto y que quedaron publicados.
+# No son datos del Estado: se marcan para no contarlos como catálogo oficial.
+DEMO = ("SampleWorldCities",)
 CATALOGO = AQUI / "datos" / "catalogo_arcgis.json"
 SOLO_LECTURA = {"readOnlyHint": True, "openWorldHint": True}
 
@@ -49,6 +53,13 @@ mcp = FastMCP("geoperu", instructions=(
 def _fn(herramienta):
     """La función de Python detrás de una herramienta, en cualquier versión de FastMCP."""
     return getattr(herramienta, "fn", herramienta)
+
+
+def _limite(valor, tope=200):
+    """Valida el límite en vez de corregirlo en silencio: pedir 0 y recibir 1 engaña al modelo."""
+    if not isinstance(valor, int) or valor < 1:
+        raise ToolError(f"limite debe ser un entero mayor o igual a 1; se recibió {valor!r}.")
+    return min(valor, tope)
 
 
 def _sin_tildes(s):
@@ -142,7 +153,7 @@ def buscar_infraestructura(departamento: str = "", provincia: str = "", tipo: st
                 "fuente": _url(where)}
 
     return {"filtro": where, "encontrados": len(filas),
-            "registros": filas[:max(1, limite)],
+            "registros": filas[:_limite(limite)],
             "capa": "Infraestructura de residuos sólidos · MINAM vía GEOPERÚ",
             "fuente": _url(where)}
 
@@ -218,7 +229,7 @@ def infraestructuras_cercanas(latitud: float, longitud: float, radio_km: float =
 
     cerca.sort(key=lambda x: x["distancia_km"])
     return {"centro": {"lat": latitud, "lon": longitud}, "radio_km": radio_km,
-            "encontrados": len(cerca), "registros": cerca[:max(1, limite)],
+            "encontrados": len(cerca), "registros": cerca[:_limite(limite)],
             "fuente": _url("1=1")}
 
 
@@ -250,6 +261,7 @@ def _capas_de(clave, raiz):
         for c in d.get("layers", []):
             capas.append({"servidor": clave, "servicio": nombre, "tipo": tipo,
                           "capa": c["id"], "nombre": c["name"],
+                          "demo": nombre in DEMO,
                           "texto": _sin_tildes(f"{clave} {nombre} {c['name']}")})
     return capas
 
@@ -262,6 +274,7 @@ def catalogo():
         # compatibilidad con el caché de la versión de un solo servidor
         for c in guardado:
             c.setdefault("servidor", "minam")
+            c.setdefault("demo", c["servicio"] in DEMO)
         return guardado
 
     capas = []
@@ -288,9 +301,17 @@ def buscar_capas(texto: str, servidor: str = "", limite: int = 15) -> dict:
     Ejemplos: "riesgo distrital", "areas naturales protegidas", "deforestacion", "zee la libertad".
     Devuelve servidor, servicio, tipo, id de capa y nombre: eso es lo que pide consultar_capa.
     """
+    if not texto.strip() and not servidor:
+        raise ToolError("Indiquen algo que buscar, o un servidor para listar sus capas: el "
+                        f"catálogo tiene {len(catalogo())} capas y no cabe en una respuesta. "
+                        "Usen listar_servidores para ver las entidades disponibles.")
     capas = catalogo()
     if servidor:
-        capas = [c for c in capas if c["servidor"] == servidor.lower().strip()]
+        clave = servidor.lower().strip()
+        if clave not in vivos():
+            raise ToolError(f"El servidor {servidor!r} no está en el registro o no respondió. "
+                            f"Disponibles: {sorted(vivos())}.")
+        capas = [c for c in capas if c["servidor"] == clave]
     for palabra in _sin_tildes(texto).split():
         capas = [c for c in capas if palabra in c["texto"]]
 
@@ -304,7 +325,7 @@ def buscar_capas(texto: str, servidor: str = "", limite: int = 15) -> dict:
                 "servidores_disponibles": list(vivos()), "total_en_catalogo": len(catalogo())}
     return {"consulta": texto, "encontradas": len(capas), "por_servidor": por_servidor,
             "capas": [{k: c[k] for k in ("servidor", "servicio", "tipo", "capa", "nombre")}
-                      for c in capas[:max(1, limite)]],
+                      for c in capas[:_limite(limite)]],
             "total_en_catalogo": len(catalogo())}
 
 
@@ -327,7 +348,7 @@ def consultar_capa(servicio: str, capa: int, where: str = "1=1", servidor: str =
     raiz = registro["raiz"]
     cuerpo = _pedir_en(f"{raiz}/{quote(servicio)}/{tipo}/{capa}/query",
                        {"where": where, "outFields": campos, "returnGeometry": "false",
-                        "f": "json", "resultRecordCount": max(1, min(limite, 200))})
+                        "f": "json", "resultRecordCount": _limite(limite)})
     rasgos = cuerpo.get("features", [])
     return {"servidor": servidor, "entidad": registro["entidad"], "servicio": servicio,
             "capa": capa, "where": where, "devueltos": len(rasgos),
@@ -344,18 +365,30 @@ def listar_servidores() -> dict:
     pregunte qué fuentes hay disponibles. Devuelve la clave de cada servidor (para pasarla a
     buscar_capas y consultar_capa), la entidad y cuántas capas aporta al catálogo.
     """
-    conteo = {}
+    import datetime
+    conteo, demo = {}, {}
     for c in catalogo():
-        conteo[c["servidor"]] = conteo.get(c["servidor"], 0) + 1
+        k = c["servidor"]
+        if c.get("demo"):
+            demo[k] = demo.get(k, 0) + 1
+        else:
+            conteo[k] = conteo.get(k, 0) + 1
     activos = [{"servidor": k, "entidad": v["entidad"], "capas": conteo.get(k, 0),
-                "raiz": v["raiz"]} for k, v in vivos().items()]
+                "capas_de_demostracion": demo.get(k, 0), "raiz": v["raiz"]}
+               for k, v in vivos().items()]
+    fecha = (datetime.datetime.fromtimestamp(CATALOGO.stat().st_mtime).isoformat(timespec="minutes")
+             if CATALOGO.exists() else None)
     no_vivos = [{"servidor": k, "entidad": v["entidad"]}
                 for k, v in SERVIDORES.items() if k not in vivos()]
     return {"activos": sorted(activos, key=lambda x: -x["capas"]),
-            "total_capas": len(catalogo()),
+            "total_capas_oficiales": sum(conteo.values()),
+            "total_capas_de_demostracion": sum(demo.values()),
+            "catalogo_descargado": fecha,
             "registrados_sin_responder": no_vivos,
             "nota": "Cada servidor es un ArcGIS REST de su propia entidad; GEOPERÚ es el visor "
-                    "que agrega varias de estas capas, no una API única."}
+                    "que agrega varias de estas capas, no una API única. Las capas de "
+                    "demostración (SampleWorldCities) vienen con ArcGIS y no son dato oficial. "
+                    "El catálogo es una copia local: 'catalogo_descargado' dice de cuándo."}
 
 
 @mcp.resource("geoperu://capa/rrss")
@@ -378,7 +411,12 @@ def ficha_capa() -> dict:
 @mcp.resource("geoperu://infraestructura/{objectid}")
 def ficha_punto(objectid: int) -> dict:
     """Ficha reproducible de un OBJECTID de la capa."""
-    return _fn(detalle_infraestructura)(int(objectid))
+    try:
+        numero = int(objectid)
+    except (TypeError, ValueError):
+        raise ToolError(f"El OBJECTID debe ser un número entero; se recibió {objectid!r}. "
+                        f"Los de esta capa van de 465 a 545.") from None
+    return _fn(detalle_infraestructura)(numero)
 
 
 @mcp.prompt
