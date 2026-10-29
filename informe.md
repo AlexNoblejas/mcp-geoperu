@@ -89,7 +89,7 @@ las pruebas 3 a 5 verifican **invariantes** (que los desgloses sumen el total, q
 un subconjunto) en vez de números clavados: una prueba atada a «24 departamentos» se rompería el día
 que el MINAM corrija la tipografía, y lo haría pareciendo un error del código.
 
-## Del dato a la fuente: 4,659 capas
+## Del dato a la fuente: 4,708 capas de dos entidades
 
 La primera versión de este servidor consultaba una sola capa, y eso lo volvía un MCP de la capa de
 residuos del MINAM, no de GeoPerú. Recorriendo el catálogo del servidor con `?f=json` aparecen
@@ -107,8 +107,29 @@ nombres llevan tildes (`02_CARACTERIZACIÓN_DEL_TERRITORIO_TUMBES`) y la URL no 
 `urllib.parse.quote` el catálogo pasó de 3,482 a 4,659 capas. Es el tipo de error que no rompe nada
 visiblemente: simplemente hace que una cuarta parte del catálogo no exista para quien consulta.
 
-**Lo que sigue siendo un límite:** es un solo servidor, el del MINAM. GeoPerú agrega capas de otras
-entidades alojadas en sus propios ArcGIS. Lo generalizable es el protocolo, no la URL.
+### De un servidor a un registro
+
+Que el servidor fuera uno solo seguía siendo el límite de fondo: era un MCP del MINAM, no de GeoPerú.
+GeoPerú es un **visor** que agrega capas publicadas por varias entidades, cada una en su propio
+ArcGIS; no existe una API única de GeoPerú. Así que el servidor pasó a tener un registro de ArcGIS
+REST del Estado, y un probador que decide cuáles entran **por evidencia**: prueba varias rutas de
+montaje por host y marca vivo solo al que devolvió su catálogo.
+
+De ocho entidades registradas, dos respondieron:
+
+| Entidad | Capas |
+|---|---:|
+| MINAM · geoservidor de GEOPERÚ | 4,659 |
+| CENEPRED · SIGRID, gestión del riesgo de desastres | 49 |
+| **Total consultable** | **4,708** |
+
+Sin responder al momento de la entrega: SERNANP, ANA, MIDAGRI, IGN, SENAMHI y MTC. Tres de ellos
+(SERNANP, ANA, IGN) devolvieron algo —el host existe pero la ruta publicada no era la probada— y
+tres no resuelven. Quedan en el registro y el MCP los ignora sin romperse; cuando una responda,
+entra sola al catálogo. Agregar una entidad es una entrada en un diccionario, no código nuevo.
+
+Esa es la diferencia entre un MCP de una capa y uno de una infraestructura de datos: el valor no
+está en la capa de residuos, está en que el protocolo ArcGIS REST es el mismo para todo el Estado.
 
 ## Qué hace el servidor para no mentir
 

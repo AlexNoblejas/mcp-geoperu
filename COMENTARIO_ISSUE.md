@@ -17,7 +17,7 @@ empezando por el geoservidor del MINAM que publica las capas de GEOPERÚ.
 
 | Proyecto del BCRP | Este |
 |---|---|
-| `catalogo()` · 17,167 series, cacheado en `datos/` | `catalogo()` · 4,659 capas, cacheado en `datos/` |
+| `catalogo()` · 17,167 series, cacheado en `datos/` | `catalogo()` · 4,708 capas de 2 entidades, cacheado en `datos/` |
 | `buscar_series("ipc 12 meses")` | `buscar_capas("riesgo distrital")` |
 | `serie(codigo, desde, hasta)` | `consultar_capa(servidor, servicio, capa, where)` |
 
@@ -43,8 +43,8 @@ empezando por el geoservidor del MINAM que publica las capas de GEOPERÚ.
 entidades, cada una en su propio ArcGIS; no hay una API única. Por eso el servidor tiene un
 registro de servidores (`servidores.py`) y un probador que decide cuáles entran por
 evidencia, no por suposición: prueba varias rutas de montaje por host y marca vivo solo al
-que devolvió su catálogo. Confirmados: MINAM y CENEPRED/SIGRID. Registrados sin responder:
-SERNANP, ANA, MIDAGRI, IGN, SENAMHI, MTC. Agregar una entidad es una entrada en un
+que devolvió su catálogo. Confirmados: **MINAM** (4,659 capas) y **CENEPRED/SIGRID** (49).
+Registrados sin responder: SERNANP, ANA, MIDAGRI, IGN, SENAMHI, MTC. Agregar una entidad es una entrada en un
 diccionario.
 
 **Nota metodológica.** Esta máquina no tiene el CLI de Claude Code, así que `evaluar.py`

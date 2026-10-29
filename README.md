@@ -24,14 +24,15 @@ de ArcGIS. No necesita clave.
 
 ## Alcance: el catálogo completo, no una capa
 
-El servidor del MINAM publica **4,659 capas georreferenciadas** en 209 servicios y 15 carpetas
+Los servidores registrados publican **4,708 capas georreferenciadas** (4,659 del MINAM en 209
+servicios y 15 carpetas, 49 de CENEPRED/SIGRID)
 temáticas (riesgo de desastres, zonificación ecológica económica, biodiversidad, agua, suelos,
 deforestación, áreas naturales protegidas, residuos). El catálogo se descubre solo recorriendo
 `?f=json`, igual que el del BCRP se baja de una URL.
 
 | El proyecto del BCRP | Este |
 |---|---|
-| `catalogo()` · 17,167 series, cacheado en `datos/` | `catalogo()` · 4,659 capas, cacheado en `datos/` |
+| `catalogo()` · 17,167 series, cacheado en `datos/` | `catalogo()` · 4,708 capas de 2 entidades, cacheado en `datos/` |
 | `buscar_series("ipc 12 meses")` | `buscar_capas("riesgo distrital")` |
 | `serie(codigo, desde, hasta)` | `consultar_capa(servicio, capa, where)` |
 
@@ -48,8 +49,8 @@ registrados y el MCP los ignora sin romperse.
 python probar_servidores.py     # reescribe servidores_vivos.json
 ```
 
-Confirmados: **MINAM** (geoservidor de GEOPERÚ) y **CENEPRED/SIGRID** (gestión del riesgo de
-desastres). En el registro, sin responder al momento de la entrega: SERNANP, ANA, MIDAGRI, IGN,
+Confirmados: **MINAM** (geoservidor de GEOPERÚ, 4,659 capas) y **CENEPRED/SIGRID** (gestión del
+riesgo de desastres, 49 capas). En el registro, sin responder al momento de la entrega: SERNANP, ANA, MIDAGRI, IGN,
 SENAMHI, MTC. Agregar una entidad es una entrada en el diccionario, no código nuevo.
 
 `listar_servidores` le dice al modelo qué entidades hay y cuántas capas aporta cada una.
