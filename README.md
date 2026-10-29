@@ -69,6 +69,9 @@ y por eso el registro puede crecer.
 | `preguntas.csv` | Las 10 preguntas de la evaluación |
 | `servidores.py` | El registro de ArcGIS REST del Estado |
 | `probar_servidores.py` | Prueba cada servidor y escribe `servidores_vivos.json` |
+| `mapa_png.py` | Mapa estático de los 76 puntos, con contorno departamental |
+| `mapa.py` | Mapa interactivo (Leaflet) de cualquier capa del catálogo |
+| `bajar_limites.py` | Cachea los límites departamentales para el mapa |
 | `descubrir.py` | Recorre el catálogo del servidor y lista todas las capas |
 | `cifras_para_verificar.py` | Calcula cada cifra y da la URL del MINAM para comprobarla a mano |
 | `evaluar.py` | Igual que el del curso; solo cambia `mcp__bcrp` por `mcp__geoperu` |

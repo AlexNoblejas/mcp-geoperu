@@ -1,0 +1,39 @@
+{
+  "fuente": "Reporte Mensual de Conflictos Sociales · Defensoría del Pueblo del Perú (SIMCO)",
+  "nota_metodologica": "Cada cifra fue leída del reporte mensual publicado por la Defensoría y se cita su URL. La Defensoría distingue conflictos ACTIVOS (con acciones de protesta o diálogo en curso) de LATENTES (sin expresión pública en ese momento). Los reportes no siempre consolidan el total de socioambientales ni listan más de tres departamentos: cuando el dato no está en el reporte, aquí es null, no una estimación.",
+  "advertencias": [
+    "Es un registro de casos en seguimiento por la Defensoría, no un censo de toda la conflictividad del país.",
+    "Varios reportes se contradicen internamente entre la carátula y las tablas de capítulo; aquí se usó la tabla de capítulo.",
+    "El conteo departamental no suma el total nacional porque los reportes solo publican los primeros puestos.",
+    "No confundir con las capas de 'Conflicto de Uso del Suelo' del MINAM: esas miden discrepancia entre uso actual y capacidad de uso mayor del suelo, no conflictividad social."
+  ],
+  "reportes": [
+    {"numero": 271, "mes": "2026-09", "mes_nombre": "setiembre de 2026", "total": 193, "activos": 144, "latentes": 49,
+     "socioambientales": 91,
+     "por_tipo": {"Socioambiental": 91, "Asuntos de gobierno nacional": 31, "Asuntos de gobierno regional": 23,
+                  "Asuntos de gobierno local": 11, "Comunal": 9, "Demarcación territorial": 9, "Laboral": 7,
+                  "Universidades": 6, "Otros asuntos": 5, "Administración de justicia": 1},
+     "top_departamentos": {"Puno": 20, "Loreto": 18, "Áncash": 17, "Piura": 14, "Cusco": 13},
+     "url": "https://www.defensoria.gob.pe/wp-content/uploads/2026/10/RCS_271_setiembre_2026.html"},
+    {"numero": 270, "mes": "2026-08", "mes_nombre": "agosto de 2026", "total": 188, "activos": 138, "latentes": 50,
+     "socioambientales": null, "por_tipo": null,
+     "top_departamentos": {"Puno": 20, "Loreto": 18, "Áncash": 16},
+     "url": "https://www.defensoria.gob.pe/wp-content/uploads/2026/09/Reporte-de-conflictos-sociales-n-270.pdf"},
+    {"numero": 268, "mes": "2026-06", "mes_nombre": "junio de 2026", "total": 197, "activos": 151, "latentes": 46,
+     "socioambientales": null, "por_tipo": null,
+     "top_departamentos": {"Loreto": 25, "Puno": 21, "Áncash": 17},
+     "url": "https://www.defensoria.gob.pe/wp-content/uploads/2026/07/Reporte-de-Conflictos-Sociales-n-268.pdf"},
+    {"numero": 267, "mes": "2026-05", "mes_nombre": "mayo de 2026", "total": 195, "activos": 153, "latentes": 42,
+     "socioambientales": 98, "por_tipo": null,
+     "top_departamentos": {"Loreto": 24, "Puno": 21, "Áncash": 16, "Piura": 13, "Cusco": 13},
+     "url": "https://www.defensoria.gob.pe/wp-content/uploads/2026/06/Reporte-de-Conflictos-Sociales-n-267-VF.pdf"},
+    {"numero": 264, "mes": "2026-02", "mes_nombre": "febrero de 2026", "total": 192, "activos": 165, "latentes": 27,
+     "socioambientales": 98, "por_tipo": null,
+     "top_departamentos": {"Loreto": 22, "Puno": 21, "Áncash": 17, "Cusco": 13, "Piura": 12},
+     "url": "https://www.defensoria.gob.pe/wp-content/uploads/2026/03/Reporte-de-Conflictos-Sociales-n-264-febrero-26.pdf"},
+    {"numero": 260, "mes": "2025-10", "mes_nombre": "octubre de 2025", "total": 197, "activos": 166, "latentes": 31,
+     "socioambientales": 97, "por_tipo": null,
+     "top_departamentos": {"Loreto": 26, "Puno": 20, "Cusco": 18, "Lima Metropolitana": 17, "Áncash": 14},
+     "url": "https://www.defensoria.gob.pe/wp-content/uploads/2025/11/Reporte-Mensual-de-Conflictos-Sociales-N%C2%B0-260-Oct_2025.pdf"}
+  ]
+}

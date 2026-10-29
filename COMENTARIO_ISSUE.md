@@ -12,6 +12,7 @@ empezando por el geoservidor del MINAM que publica las capas de GEOPERÚ.
 | Herramientas | 7 · dos genéricas (`buscar_capas`, `consultar_capa`) + `listar_servidores` + cuatro dedicadas a residuos sólidos |
 | Herramienta propia | `infraestructuras_cercanas`: radio en km desde una coordenada, con haversine en Python |
 | Evaluación | memoria **0/10** · MCP **10/10** |
+| Mapas | `mapa_residuos.png` y `mapa_residuos.html` (Leaflet), con el contorno departamental tomado del propio geoservidor |
 
 **La arquitectura es la del profesor, sobre otro catálogo:**
 
