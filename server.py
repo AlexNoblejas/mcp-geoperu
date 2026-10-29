@@ -71,15 +71,52 @@ def _pedir(params):
     return _pedir_en(f"{CAPA}/query", params)
 
 
+# El geoservidor tiene un WAF delante que responde 403 a patrones de inyección SQL. Rechazarlos
+# aquí da un mensaje accionable en vez de un 403 opaco.
+PROHIBIDO = ("--", ";", "/*", "*/", " xp_", "@@")
+
+
+def _revisar_where(where):
+    """Rechaza lo que el WAF del geoservidor va a bloquear, con un mensaje que el modelo entienda."""
+    for patron in PROHIBIDO:
+        if patron in where:
+            raise ToolError(
+                f"El filtro contiene {patron!r}, que el geoservidor bloquea (responde 403). "
+                f"`where` es una condición SQL simple de ArcGIS, sin comentarios ni varias "
+                f'sentencias: por ejemplo "1=1", "NOMBDEP=\'PIURA\'" o '
+                f'"POT_FOR IN (\'Alto\',\'Muy Alto\')".')
+    return where
+
+
 def _pedir_en(url, params):
-    """Una consulta a cualquier endpoint ArcGIS, con errores que el modelo pueda entender."""
+    """Una consulta a cualquier endpoint ArcGIS, con errores que el modelo pueda entender.
+
+    Distingue el fallo pasajero del rechazo definitivo: decirle al modelo que reintente un 403
+    lo manda a insistir en algo que nunca va a funcionar.
+    """
     try:
         r = httpx.get(url, params=params, timeout=90, follow_redirects=True)
         r.raise_for_status()
         cuerpo = r.json()
+    except httpx.HTTPStatusError as e:
+        codigo = e.response.status_code
+        if codigo == 403:
+            raise ToolError(
+                f"El geoservidor rechazó la consulta (403). No es una caída: suele ser el filtro "
+                f"`where`, que su WAF bloquea cuando parece inyección SQL. Revisen el filtro; "
+                f"reintentar igual no va a servir.") from e
+        if codigo == 404:
+            raise ToolError(
+                f"Esa capa no existe en el geoservidor (404). Confirmen servicio, tipo y número "
+                f"de capa con buscar_capas; reintentar igual no va a servir.") from e
+        if 400 <= codigo < 500:
+            raise ToolError(f"El geoservidor rechazó la consulta ({codigo}). Es un problema del "
+                            f"pedido, no del servidor: reintentar igual no va a servir.") from e
+        raise ToolError(f"El geoservidor del MINAM falló ({codigo}). Es un fallo del servidor: "
+                        f"esperen unos segundos y reintenten.") from e
     except httpx.HTTPError as e:
-        raise ToolError(f"El geoservidor del MINAM no respondió: {e}. Es un servidor del Estado y "
-                        f"a veces está caído: reintenten en unos segundos.") from e
+        raise ToolError(f"No se pudo llegar al geoservidor del MINAM: {type(e).__name__}. "
+                        f"Puede ser red o que esté caído: esperen unos segundos y reintenten.") from e
     except ValueError as e:
         raise ToolError("El geoservidor del MINAM devolvió HTML en vez de JSON. Reintenten.") from e
     if "error" in cuerpo:
@@ -346,6 +383,7 @@ def consultar_capa(servicio: str, capa: int, where: str = "1=1", servidor: str =
         raise ToolError(f"El servidor {servidor!r} no está en el registro o no respondió. "
                         f"Disponibles: {sorted(vivos())}.")
     raiz = registro["raiz"]
+    _revisar_where(where)
     cuerpo = _pedir_en(f"{raiz}/{quote(servicio)}/{tipo}/{capa}/query",
                        {"where": where, "outFields": campos, "returnGeometry": "false",
                         "f": "json", "resultRecordCount": _limite(limite)})

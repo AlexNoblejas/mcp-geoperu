@@ -139,3 +139,11 @@ def test_limite_invalido_no_se_corrige_en_silencio():
 def test_busqueda_vacia_no_vuelca_el_catalogo():
     with pytest.raises(ToolError, match="buscar"):
         llamar("buscar_capas", texto="")
+
+
+# extra · el `where` peligroso se rechaza aqui, con mensaje util, no con un 403 opaco
+def test_where_con_inyeccion_se_rechaza_antes_de_salir():
+    for mal in ["1=1 OR 1=1--", "1=1; DROP TABLE x", "1=1 /* comentario */"]:
+        with pytest.raises(ToolError, match="bloquea|403"):
+            llamar("consultar_capa", servicio="Servicios_Riesgos_DGCCD/Limite_Distrital",
+                   capa=0, where=mal, limite=1)

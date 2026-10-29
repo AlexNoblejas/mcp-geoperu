@@ -8,7 +8,7 @@ empezando por el geoservidor del MINAM que publica las capas de GEOPERÚ.
 
 | | |
 |---|---|
-| Pruebas | 15 en verde, con datos reales. La tabla de equivalencia con las 8 del proyecto original está en el README |
+| Pruebas | 16 en verde, con datos reales. La tabla de equivalencia con las 8 del proyecto original está en el README |
 | Herramientas | 7 · dos genéricas (`buscar_capas`, `consultar_capa`) + `listar_servidores` + cuatro dedicadas a residuos sólidos |
 | Herramienta propia | `infraestructuras_cercanas`: radio en km desde una coordenada, con haversine en Python |
 | Evaluación | memoria **0/10** · MCP **10/10** |
@@ -45,8 +45,16 @@ un servidor mal escrito devolvía 0 capas en vez de error; la búsqueda vacía v
 4,708 capas al contexto; el recurso con entrada no numérica lanzaba un `ValueError` de
 Python en vez de un `ToolError` util; `SampleWorldCities` —el servicio de demostración que
 ArcGIS instala por defecto y quedó publicado en CENEPRED— se contaba como dato oficial
-(46 capas útiles, no 49); y el catálogo no declaraba su fecha de descarga. Los seis
-devolvían respuestas plausibles sin lanzar ningún error.
+(46 capas útiles, no 49); y el catálogo no declaraba su fecha de descarga.
+
+El séptimo salió de probar inyección SQL en el `where`. El geoservidor respondió **403**
+—tiene un WAF, y el endpoint `query` de ArcGIS es de solo lectura—, pero mi servidor
+traducía cualquier fallo HTTP al mismo texto: «a veces está caído, reintenten». Un 403 no
+es una caída: le estaba diciendo al modelo que insistiera en algo que nunca iba a
+funcionar. Ahora distingue 403, 404, 4xx y 5xx, y los patrones que el WAF bloquea se
+rechazan antes de salir a la red con un mensaje que muestra la sintaxis correcta.
+
+Los siete devolvían respuestas plausibles sin lanzar ningún error.
 
 **Qué es y qué no es GEOPERÚ.** Es un visor que agrega capas publicadas por varias
 entidades, cada una en su propio ArcGIS; no hay una API única. Por eso el servidor tiene un

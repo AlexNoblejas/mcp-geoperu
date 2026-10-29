@@ -159,7 +159,30 @@ negativas, de tipo equivocado, nombres inexistentes— y salieron seis defectos,
 | 5 | `SampleWorldCities` contaba como dato oficial | 3 de las 49 capas de CENEPRED son el servicio de demostración que ArcGIS instala por defecto: las útiles son 46 |
 | 6 | el catálogo no declaraba su fecha | es una copia local sin expiración; servía datos viejos sin decir de cuándo eran |
 
-Los seis comparten la forma de los hallazgos anteriores: **ninguno lanzaba un error**. Todos
+### El séptimo: un mensaje de error que mandaba al modelo a insistir
+
+La prueba de inyección en el `where` de `consultar_capa` no se pudo correr en el primer pase por
+falta de red, y al correrla salió el defecto más interesante. Con `where="1=1 OR 1=1--"`, el
+geoservidor respondió **403 Forbidden** —la misma capa había respondido bien con `where="1=1"` tres
+minutos antes, así que no estaba caída: tiene un WAF que bloquea patrones de inyección SQL.
+
+El problema no era la seguridad, era el mensaje. El servidor traducía *cualquier* fallo de HTTP al
+mismo texto: «Es un servidor del Estado y a veces está caído: reintenten en unos segundos». Un 403
+no es una caída, es un rechazo, y reintentarlo falla siempre. El `ToolError` estaba mandando al
+modelo a insistir en algo que nunca iba a funcionar, que es lo contrario de lo que la diapositiva 20
+del curso pide de un `ToolError`.
+
+Ahora el manejo distingue por código: 403 explica que es el filtro y que reintentar no sirve, 404
+que la capa no existe y hay que confirmarla con `buscar_capas`, el resto de 4xx que el problema está
+en el pedido, y solo 5xx y los fallos de red sugieren reintentar. Y los patrones que el WAF va a
+bloquear (`--`, `;`, `/*`) se rechazan antes de salir a la red, con un mensaje que muestra la forma
+correcta de un filtro de ArcGIS. Son **16 pruebas**.
+
+Vale la pena separar las dos conclusiones: la fuente está razonablemente protegida —hay un WAF y el
+endpoint `query` de ArcGIS es de solo lectura, sin superficie de escritura—, y el defecto era mío,
+en cómo le explicaba el fallo al modelo.
+
+Los siete comparten la forma de los hallazgos anteriores: **ninguno lanzaba un error**. Todos
 devolvían una respuesta plausible. El defecto 5 es el más instructivo porque no es un bug de código
 sino de lectura: `SampleWorldCities` son ciudades del mundo que vienen con la instalación de ArcGIS,
 y quedaron publicadas en el servidor de CENEPRED. Contarlas como catálogo nacional infla la cifra
@@ -168,7 +191,7 @@ en un 6 % para esa entidad.
 Ahora `limite` se valida, un servidor inexistente lanza `ToolError` nombrando los disponibles, la
 búsqueda vacía exige un término o un servidor, el recurso explica que el OBJECTID va de 465 a 545,
 las capas de demostración se cuentan aparte y `listar_servidores` declara cuándo se descargó el
-catálogo. Hay cinco pruebas nuevas que fijan ese comportamiento: **15 en total**.
+catálogo. Hay pruebas nuevas que fijan ese comportamiento.
 
 ## Conclusión
 
