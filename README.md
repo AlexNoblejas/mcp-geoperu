@@ -37,18 +37,37 @@ deforestación, áreas naturales protegidas, residuos). El catálogo se descubre
 
 `descubrir.py` imprime el catálogo entero si quieren verlo sin pasar por el MCP.
 
-**Límite declarado:** es *un* servidor, el del MINAM. GeoPerú como visor agrega capas de otras
-entidades alojadas en sus propios servidores (SERNANP, MIDAGRI, IGN). Lo que generaliza es el
-protocolo: `consultar_capa` sirve con cualquier ArcGIS REST del Estado cambiando la constante `RAIZ`.
+### Multi-entidad
+
+El servidor no está atado a una institución. `servidores.py` es un registro de ArcGIS REST del
+Estado peruano, y `probar_servidores.py` decide cuáles entran **por evidencia**: prueba varias rutas
+de montaje por host y marca vivo solo el que devolvió su catálogo. Los que no responden se quedan
+registrados y el MCP los ignora sin romperse.
+
+```bash
+python probar_servidores.py     # reescribe servidores_vivos.json
+```
+
+Confirmados: **MINAM** (geoservidor de GEOPERÚ) y **CENEPRED/SIGRID** (gestión del riesgo de
+desastres). En el registro, sin responder al momento de la entrega: SERNANP, ANA, MIDAGRI, IGN,
+SENAMHI, MTC. Agregar una entidad es una entrada en el diccionario, no código nuevo.
+
+`listar_servidores` le dice al modelo qué entidades hay y cuántas capas aporta cada una.
+
+**Lo que GEOPERÚ es y no es:** un visor que agrega capas publicadas por varias entidades, cada una
+en su propio ArcGIS. No hay una API única de GEOPERÚ. Lo que generaliza es el protocolo ArcGIS REST,
+y por eso el registro puede crecer.
 
 ## Arquitectura
 
 | Archivo | Qué es |
 |---|---|
-| `server.py` | El servidor: 6 herramientas, 2 recursos, 1 prompt |
+| `server.py` | El servidor: 7 herramientas, 2 recursos, 1 prompt |
 | `test_server.py` | El contrato: 8 pruebas equivalentes a las 8 del BCRP, con datos reales |
 | `.mcp.json` | `geoperu` y `fetch`, sin claves |
 | `preguntas.csv` | Las 10 preguntas de la evaluación |
+| `servidores.py` | El registro de ArcGIS REST del Estado |
+| `probar_servidores.py` | Prueba cada servidor y escribe `servidores_vivos.json` |
 | `descubrir.py` | Recorre el catálogo del servidor y lista todas las capas |
 | `cifras_para_verificar.py` | Calcula cada cifra y da la URL del MINAM para comprobarla a mano |
 | `evaluar.py` | Igual que el del curso; solo cambia `mcp__bcrp` por `mcp__geoperu` |
@@ -58,7 +77,8 @@ protocolo: `consultar_capa` sirve con cualquier ArcGIS REST del Estado cambiando
 
 | Herramienta | Qué hace | Por qué existe |
 |---|---|---|
-| `buscar_capas` | busca entre las 4,659 capas del servidor | el equivalente de `buscar_series`: descubrir antes de consultar |
+| `listar_servidores` | qué entidades están registradas y respondiendo | el modelo no adivina de dónde viene un dato |
+| `buscar_capas` | busca entre las capas de todos los servidores vivos | el equivalente de `buscar_series`: descubrir antes de consultar |
 | `consultar_capa` | consulta cualquier capa con un `where` de ArcGIS | el equivalente de `serie`: una función para todas las capas |
 | `buscar_infraestructura` | filtra por departamento, provincia o tipo | el equivalente de `buscar_series` |
 | `resumen_territorial` | totales y desgloses por tipo, departamento y provincia | el equivalente de `resumen`: Python cuenta, no el modelo |

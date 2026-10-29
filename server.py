@@ -21,25 +21,29 @@ import httpx
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
+from servidores import SERVIDORES, vivos
+
 AQUI = Path(__file__).parent
 SNAPSHOT = AQUI / "datos" / "geoperu_rrss.json"
 CAPA = ("https://geoservidorperu.minam.gob.pe/arcgis/rest/services/"
         "Servicios_GeoPERU/ServicioRRSS_MINAM/MapServer/0")
 CAMPOS = "OBJECTID,DEPARTAMEN,PROVINCIA,DISTRITO,Tipo_de_In"
 
-# El catálogo completo del servidor. Es el equivalente de las 17,167 series del BCRP:
-# 3,482 capas publicadas, que se descubren solas en vez de escribirse a mano.
-RAIZ = "https://geoservidorperu.minam.gob.pe/arcgis/rest/services"
+# El catálogo de capas de TODOS los servidores vivos del registro. Es el equivalente de las
+# 17,167 series del BCRP: se descubre solo en vez de escribirse a mano.
+RAIZ = SERVIDORES["minam"]["raiz"]          # el servidor de la capa de residuos
 CATALOGO = AQUI / "datos" / "catalogo_arcgis.json"
 SOLO_LECTURA = {"readOnlyHint": True, "openWorldHint": True}
 
 mcp = FastMCP("geoperu", instructions=(
-    "Datos georreferenciados del geoservidor del Ministerio del Ambiente, publicados en GEOPERÚ. "
-    "Dos niveles. (1) Para residuos sólidos hay herramientas dedicadas: buscar_infraestructura, "
-    "resumen_territorial, detalle_infraestructura e infraestructuras_cercanas. (2) Para cualquier "
-    "otro tema territorial —riesgo de desastres, ZEE, biodiversidad, agua, suelos, deforestación, "
-    "áreas protegidas— busca primero la capa con buscar_capas y luego consúltala con consultar_capa. "
-    "No cuentes a mano y cita siempre la URL de consulta que devuelve cada herramienta."))
+    "Datos georreferenciados de servidores ArcGIS del Estado peruano, entre ellos el geoservidor "
+    "del Ministerio del Ambiente que publica las capas de GEOPERÚ. Tres niveles. (1) listar_servidores "
+    "dice qué entidades están disponibles. (2) Para cualquier tema territorial —riesgo de desastres, "
+    "ZEE, biodiversidad, agua, suelos, deforestación, áreas protegidas— busca la capa con buscar_capas "
+    "y consúltala con consultar_capa. (3) Para infraestructura de residuos sólidos hay herramientas "
+    "dedicadas, trabajadas a fondo: buscar_infraestructura, resumen_territorial, "
+    "detalle_infraestructura e infraestructuras_cercanas. No cuentes a mano y cita siempre la URL "
+    "de consulta que devuelve cada herramienta."))
 
 
 def _fn(herramienta):
@@ -218,20 +222,17 @@ def infraestructuras_cercanas(latitud: float, longitud: float, radio_km: float =
             "fuente": _url("1=1")}
 
 
-@cache
-def catalogo():
-    """Las capas publicadas por el servidor: carpeta, servicio, id y nombre. Se baja una vez."""
-    if CATALOGO.exists():
-        return json.loads(CATALOGO.read_text(encoding="utf-8"))
+def _leer(url):
+    r = httpx.get(url, params={"f": "json"}, timeout=90, follow_redirects=True)
+    r.raise_for_status()
+    return r.json()
 
-    def leer(url):
-        r = httpx.get(url, params={"f": "json"}, timeout=90, follow_redirects=True)
-        r.raise_for_status()
-        return r.json()
 
+def _capas_de(clave, raiz):
+    """Recorre un ArcGIS Server y devuelve todas sus capas. Los fallos se saltan, no abortan."""
     def recorrer(carpeta=""):
         try:
-            d = leer(f"{RAIZ}/{quote(carpeta)}" if carpeta else RAIZ)
+            d = _leer(f"{raiz}/{quote(carpeta)}" if carpeta else raiz)
         except (httpx.HTTPError, ValueError):
             return
         for s in d.get("services", []):
@@ -243,65 +244,118 @@ def catalogo():
     capas = []
     for nombre, tipo in recorrer():
         try:
-            d = leer(f"{RAIZ}/{quote(nombre)}/{tipo}")
+            d = _leer(f"{raiz}/{quote(nombre)}/{tipo}")
         except (httpx.HTTPError, ValueError):
             continue
         for c in d.get("layers", []):
-            capas.append({"servicio": nombre, "tipo": tipo, "capa": c["id"],
-                          "nombre": c["name"],
-                          "texto": _sin_tildes(f"{nombre} {c['name']}")})
+            capas.append({"servidor": clave, "servicio": nombre, "tipo": tipo,
+                          "capa": c["id"], "nombre": c["name"],
+                          "texto": _sin_tildes(f"{clave} {nombre} {c['name']}")})
+    return capas
+
+
+@cache
+def catalogo():
+    """Las capas de todos los servidores vivos del registro. Se baja una vez y queda en datos/."""
+    if CATALOGO.exists():
+        guardado = json.loads(CATALOGO.read_text(encoding="utf-8"))
+        # compatibilidad con el caché de la versión de un solo servidor
+        for c in guardado:
+            c.setdefault("servidor", "minam")
+        return guardado
+
+    capas = []
+    for clave, s in vivos().items():
+        capas += _capas_de(clave, s["raiz"])
     if not capas:
-        raise ToolError("No se pudo leer el catálogo del geoservidor.")
+        raise ToolError("Ningún servidor del registro respondió. Corran probar_servidores.py.")
     CATALOGO.parent.mkdir(exist_ok=True)
     CATALOGO.write_text(json.dumps(capas, ensure_ascii=False), encoding="utf-8")
     return capas
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
-def buscar_capas(texto: str, limite: int = 15) -> dict:
-    """Busca entre las capas georreferenciadas publicadas por el geoservidor del MINAM.
+def buscar_capas(texto: str, servidor: str = "", limite: int = 15) -> dict:
+    """Busca entre las capas georreferenciadas de los servidores del Estado peruano registrados.
 
-    Es el primer paso para cualquier pregunta territorial que NO sea de residuos sólidos: el
-    servidor publica más de tres mil capas (riesgo de desastres, zonificación ecológica
-    económica, biodiversidad, agua, suelos, deforestación, áreas naturales protegidas), y esta
-    herramienta encuentra la que corresponde. Todas las palabras deben aparecer en el nombre del
-    servicio o de la capa; no distingue tildes ni mayúsculas.
+    Es el primer paso para cualquier pregunta territorial: los servidores publican miles de capas
+    (riesgo de desastres, zonificación ecológica económica, biodiversidad, agua, suelos,
+    deforestación, áreas naturales protegidas, transporte), y esta herramienta encuentra la que
+    corresponde. Todas las palabras deben aparecer en el nombre del servidor, del servicio o de la
+    capa; no distingue tildes ni mayúsculas.
 
+    servidor: limita la búsqueda a una entidad ("minam", "sernanp", "ana"...). Vacío = todas.
     Ejemplos: "riesgo distrital", "areas naturales protegidas", "deforestacion", "zee la libertad".
-    Devuelve servicio, tipo, id de capa y nombre: eso es lo que pide consultar_capa.
+    Devuelve servidor, servicio, tipo, id de capa y nombre: eso es lo que pide consultar_capa.
     """
     capas = catalogo()
+    if servidor:
+        capas = [c for c in capas if c["servidor"] == servidor.lower().strip()]
     for palabra in _sin_tildes(texto).split():
         capas = [c for c in capas if palabra in c["texto"]]
+
+    por_servidor = {}
+    for c in capas:
+        por_servidor[c["servidor"]] = por_servidor.get(c["servidor"], 0) + 1
+
     if not capas:
         return {"consulta": texto, "encontradas": 0, "capas": [],
-                "sugerencia": "Pruebe con menos palabras.", "total_en_catalogo": len(catalogo())}
-    return {"consulta": texto, "encontradas": len(capas),
-            "capas": [{k: c[k] for k in ("servicio", "tipo", "capa", "nombre")}
+                "sugerencia": "Pruebe con menos palabras o sin filtrar por servidor.",
+                "servidores_disponibles": list(vivos()), "total_en_catalogo": len(catalogo())}
+    return {"consulta": texto, "encontradas": len(capas), "por_servidor": por_servidor,
+            "capas": [{k: c[k] for k in ("servidor", "servicio", "tipo", "capa", "nombre")}
                       for c in capas[:max(1, limite)]],
             "total_en_catalogo": len(catalogo())}
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
-def consultar_capa(servicio: str, capa: int, where: str = "1=1", tipo: str = "MapServer",
-                   campos: str = "*", limite: int = 20) -> dict:
-    """Consulta cualquier capa del geoservidor, con los datos que devuelva buscar_capas.
+def consultar_capa(servicio: str, capa: int, where: str = "1=1", servidor: str = "minam",
+                   tipo: str = "MapServer", campos: str = "*", limite: int = 20) -> dict:
+    """Consulta cualquier capa de cualquier servidor registrado, con lo que devuelva buscar_capas.
 
-    Úsala después de buscar_capas. `where` es SQL de ArcGIS: "1=1" trae todo,
-    "DEPARTAMENTO='PIURA'" filtra. Para saber qué campos tiene una capa antes de filtrar,
-    consúltenla con where="1=1" y limite=1 y miren las claves del primer registro.
+    Úsala después de buscar_capas, pasando el mismo `servidor`, `servicio`, `tipo` y `capa` que
+    ella devolvió. `where` es SQL de ArcGIS: "1=1" trae todo, "DEPARTAMENTO='PIURA'" filtra.
+    Para saber qué campos tiene una capa antes de filtrar, consúltenla con where="1=1" y limite=1
+    y miren las claves del primer registro.
 
     Devuelve el conteo, los registros y la URL exacta de la consulta.
     """
-    cuerpo = _pedir_en(f"{RAIZ}/{quote(servicio)}/{tipo}/{capa}/query",
+    registro = vivos().get(servidor.lower().strip())
+    if registro is None:
+        raise ToolError(f"El servidor {servidor!r} no está en el registro o no respondió. "
+                        f"Disponibles: {sorted(vivos())}.")
+    raiz = registro["raiz"]
+    cuerpo = _pedir_en(f"{raiz}/{quote(servicio)}/{tipo}/{capa}/query",
                        {"where": where, "outFields": campos, "returnGeometry": "false",
                         "f": "json", "resultRecordCount": max(1, min(limite, 200))})
     rasgos = cuerpo.get("features", [])
-    return {"servicio": servicio, "capa": capa, "where": where,
-            "devueltos": len(rasgos),
+    return {"servidor": servidor, "entidad": registro["entidad"], "servicio": servicio,
+            "capa": capa, "where": where, "devueltos": len(rasgos),
             "registros": [f.get("attributes", {}) for f in rasgos],
-            "fuente": f"{RAIZ}/{quote(servicio)}/{tipo}/{capa}/query?where={quote(where)}"
+            "fuente": f"{raiz}/{quote(servicio)}/{tipo}/{capa}/query?where={quote(where)}"
                       f"&outFields={campos}&f=json"}
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+def listar_servidores() -> dict:
+    """Las entidades del Estado peruano cuyos servidores están registrados y respondiendo.
+
+    Úsala cuando no sepas de qué entidad puede venir un dato territorial, o cuando el usuario
+    pregunte qué fuentes hay disponibles. Devuelve la clave de cada servidor (para pasarla a
+    buscar_capas y consultar_capa), la entidad y cuántas capas aporta al catálogo.
+    """
+    conteo = {}
+    for c in catalogo():
+        conteo[c["servidor"]] = conteo.get(c["servidor"], 0) + 1
+    activos = [{"servidor": k, "entidad": v["entidad"], "capas": conteo.get(k, 0),
+                "raiz": v["raiz"]} for k, v in vivos().items()]
+    no_vivos = [{"servidor": k, "entidad": v["entidad"]}
+                for k, v in SERVIDORES.items() if k not in vivos()]
+    return {"activos": sorted(activos, key=lambda x: -x["capas"]),
+            "total_capas": len(catalogo()),
+            "registrados_sin_responder": no_vivos,
+            "nota": "Cada servidor es un ArcGIS REST de su propia entidad; GEOPERÚ es el visor "
+                    "que agrega varias de estas capas, no una API única."}
 
 
 @mcp.resource("geoperu://capa/rrss")

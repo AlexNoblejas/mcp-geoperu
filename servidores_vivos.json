@@ -1,0 +1,40 @@
+{
+ "minam": {
+  "vivo": true,
+  "raiz": "https://geoservidorperu.minam.gob.pe/arcgis/rest/services",
+  "servicios_raiz": 55,
+  "carpetas": 15,
+  "version": 10.71
+ },
+ "sernanp": {
+  "vivo": false,
+  "error": "JSONDecodeError"
+ },
+ "ana": {
+  "vivo": false,
+  "error": "HTTPStatusError"
+ },
+ "midagri": {
+  "vivo": false,
+  "error": "ConnectError"
+ },
+ "ign": {
+  "vivo": false,
+  "error": "HTTPStatusError"
+ },
+ "senamhi": {
+  "vivo": false,
+  "error": "ConnectError"
+ },
+ "sigrid": {
+  "vivo": true,
+  "raiz": "https://sigrid.cenepred.gob.pe/arcgis/rest/services",
+  "servicios_raiz": 1,
+  "carpetas": 10,
+  "version": 10.81
+ },
+ "mtc": {
+  "vivo": false,
+  "error": "ConnectError"
+ }
+}

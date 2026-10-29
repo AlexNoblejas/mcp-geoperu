@@ -98,3 +98,29 @@ def test_nombre_exacto_no_arrastra_subcadenas():
     huanca = llamar("buscar_infraestructura", departamento="huancavelica", limite=100)
     assert all(x["departamento"] == "HUANCAVELICA" for x in huanca["registros"])
     assert ica["encontrados"] + huanca["encontrados"] <= llamar("resumen_territorial")["total"]
+
+
+# extra · el registro multi-entidad
+def test_registro_de_servidores():
+    r = llamar("listar_servidores")
+    assert r["activos"], "ningun servidor del registro respondio"
+    assert {"servidor", "entidad", "capas"} <= r["activos"][0].keys()
+    assert r["total_capas"] == sum(s["capas"] for s in r["activos"])
+    assert "minam" in [s["servidor"] for s in r["activos"]]
+
+
+def test_buscar_capas_y_consultar_capa():
+    b = llamar("buscar_capas", texto="limite distrital", limite=5)
+    assert b["encontradas"] >= 1
+    c = b["capas"][0]
+    assert {"servidor", "servicio", "tipo", "capa", "nombre"} <= c.keys()
+    q = llamar("consultar_capa", servicio=c["servicio"], capa=c["capa"],
+               servidor=c["servidor"], tipo=c["tipo"], limite=2)
+    assert q["devueltos"] >= 1
+    assert q["fuente"].startswith("http")
+    assert isinstance(q["registros"][0], dict) and q["registros"][0]
+
+
+def test_servidor_inexistente_da_un_error_claro():
+    with pytest.raises(ToolError, match="atlantis"):
+        llamar("consultar_capa", servicio="x", capa=0, servidor="atlantis")
