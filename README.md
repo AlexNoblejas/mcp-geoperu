@@ -110,7 +110,21 @@ uv run cifras_para_verificar.py   # 2. las cifras + la URL del MINAM de cada una
 uv run evaluar.py                 # 4. memoria contra MCP
 ```
 
-Para conectarlo a Claude Code:
+### Verificarlo sin el CLI
+
+```bash
+python probar_mcp.py
+```
+
+Arranca el servidor por stdio y ejercita el protocolo completo —negocia la conexión, lista las 7
+herramientas, el recurso, la plantilla y el prompt, y los llama— igual que haría Claude Code, pero
+sin necesitar el CLI instalado. Es la forma de comprobar que el servidor cumple MCP en una máquina
+donde `claude` no está en el PATH.
+
+### Conectarlo a Claude Code
+
+Requiere Claude Code instalado (`claude --version` debe responder). Si no lo está, `probar_mcp.py`
+cumple la verificación.
 
 ```bash
 claude mcp add --scope project geoperu -- uv run server.py
