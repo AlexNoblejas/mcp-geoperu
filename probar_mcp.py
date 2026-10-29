@@ -30,7 +30,9 @@ async def main():
         for x in rec:
             print(f"  - {x.uri}")
         for x in plt:
-            print(f"  - {x.uriTemplate}  (plantilla)")
+            # el SDK v2 renombro uriTemplate -> uri_template; se aceptan ambos
+            plantilla = getattr(x, "uri_template", None) or getattr(x, "uriTemplate", "")
+            print(f"  - {plantilla}  (plantilla)")
         prompts = await c.list_prompts()
         print(f"\nPROMPTS ({len(prompts)})")
         for x in prompts:
